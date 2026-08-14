@@ -1,4 +1,4 @@
-Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.  Skill details should live in the skill files, not this document.  
+Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.  
 
 ##What we are building:
 
