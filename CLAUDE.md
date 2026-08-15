@@ -1,4 +1,4 @@
-Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.  Skill details should live in the skill files, not this document.
+Additions to this document must be minimal and concise. Embolding and all caps are reserved for negation of clauses, not used to emphasize points. Narration on why these instructions exist should not be present in this document. Skill details should live in the skill files, not this document.
 
 ##What we are building:
 
@@ -193,6 +193,15 @@ See `/docs/db/DATABASE_SCHEMA.md` for full table list and descriptions.
 
 ### Prod mutations: only through the vetted path
 - Every prod DB mutation goes through `migrate_prod.sh up`. Even a one-row data fix should be a tiny migration, which keeps a single, reviewable entrypoint.
+- Ownership test before putting DML in a migration. Ask who owns the value's current state. If an
+  admin, client orgs, provider, or end users can change it in the UI, a migration must not restate it — the
+  ledger is a permanent instruction to set it again. That includes derived values an override flag
+  can pin (`*_is_manual` on fulfillment prices): recompute only where the flag is unset.
+- DML that does belong in a migration must be scoped so a replay is a no-op. Key on the rows that
+  existed — an explicit id/slug list, or `WHERE created_at < '<date>'` — never on a live state value
+  like `WHERE status = 'pending'`. "Existing rows" in a comment is not a WHERE clause.
+- `up` refuses a full replay against a populated database (`scripts/sb_migrate/replay_guard.sh`).
+  A restored or rebuilt stack takes `baseline`, not `up`.
 
 ### Applying Migrations to Self-Hosted Prod (AWS RDS + Supabase Stack on AWS)
 - Prod is SSM-only (private RDS) — apply migrations with the ledger-backed `migrate_prod.sh status` / `up`: use the **`prod-migrations`** skill. AWS-specific constraints (pg_cron limits, EventBridge crons, `tf.sh apply` verification) are in the **`migrations`** skill.
