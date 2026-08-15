@@ -1,4 +1,4 @@
-Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.
+Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.  Skill details should live in the skill files, not this document.
 
 ##What we are building:
 
@@ -18,7 +18,7 @@ Subproject default paths:
 - `app_d_njs/` — Next.js, port 3004
 - `api_fastapi/` — FastAPI backend, port 8000
 
-The Next.js servers hot reload. **FastAPI only reloads if it was started with `--reload`** — a
+The Next.js servers hot reload. FastAPI only reloads if it was started with `--reload` — a
 long-running `uvicorn app.main:app --port 8000` serves whatever the code looked like when it
 started, silently. That has already produced a false "the fix didn't work" reading during
 verification. Before trusting anything you measure against port 8000, check the process:
@@ -30,19 +30,22 @@ All repos auto deploy on pushes to main git branch (ignored on no diff).
 Note: the prod FastAPI API runs on Render; the prod DB is AWS RDS (private, SSM-only).
 
 ### Staging environment (full cloud replica, safe to test against)
-There is a complete cloud staging stack (Render FastAPI + Supabase DB + Vercel previews) that mirrors prod but is fully isolated from AWS prod data — safe for prod-like end-to-end testing including real mutations. URLs, the persistent `staging` branch (**never** commit directly to it), and refreshing it (`scripts/refresh-staging.sh`): use the **`staging`** skill.
+There is a complete cloud staging stack (Render FastAPI + Supabase DB + Vercel previews) that mirrors prod but is fully isolated from AWS prod data — safe for prod-like end-to-end testing including real mutations. Stripe
+on staging and on every Vercel preview is **test mode** (<REDACTED_ACCOUNT> account); live keys exist only
+on the production target of each Vercel project and on the prod Render service. URLs, the persistent `staging` branch (**never** commit directly to it), and refreshing it (`scripts/refresh-staging.sh`): use the **`staging`** skill.
 
 
 ### Prod safety (applies to this entire file)
-**Ask the user** before any prod mutation — `migrate_prod.sh up`, prod DB value changes, `tf.sh apply`.
-Read-only prod queries are fine and need no confirmation. This governs every section here,
-including Shipping: "ship it" never authorizes a prod mutation on its own.
+Ask the user before any prod mutation — `migrate_prod.sh up`, prod DB value changes, `tf.sh apply`.
+Read-only prod queries are fine and need no confirmation.
+Exception: "ship it" authorizes the prod mutations the shipped work needs — apply them without
+re-asking per file. That covers *your* work only: never sweep in another session's pending
+migration, and `tf.sh apply` still needs its own OK.
 
 ### Planning, Implementation, and Delegation Notes
 
 #### Scale rigor to blast radius (governs everything below)
-Not every rule in this file applies equally to every change. Pick the path from what the change
-can break:
+Pick the path from what the change can break:
 
 - Light path — read-only work, local-only changes, docs, copy tweaks, single-file edits, and
   anything trivially reversible: make the change, `npm run build` (or compile) if code, done. No
@@ -66,6 +69,9 @@ don't ask. Escalate mid-task if the change turns out to touch the full-protocol 
 
 #### Implementation
 - LLM inference is costly and can be lossy.  When attempting to copy large content, code, or files, prefer using system commands like cp or sed or scripts rather than regurgitating code with your own inference.
+- Screenshot every new component and every modal/dialog you touched, at the width it ships at,
+  before reporting it done. `innerText` and the a11y snapshot report a component that has blown its
+  container or pushed content off-screen as correct.
 
 #### Delegation
 - Once plan is created or change is decided, please delegate implementation to (an) agent(s) running in the background unless told otherwise.  However, if you're already deep in the code, it may be better for you to implement without delegation. 
@@ -74,32 +80,30 @@ don't ask. Escalate mid-task if the change turns out to touch the full-protocol 
 
 #### Keeping subagents in scope
 Subagents execute a brief exhaustively and literally. Constrain what they change; leave what they
-investigate thorough — the deep read-only passes are what catch real defects, and the sprawl comes
-from unrequested writes.
+investigate thorough.
 
 - The brief's length affects the output's length. An eight-item numbered checklist produces an
   eight-item exhaustive pass. Ask for the smallest thing that answers the question — "screenshot
   the sign-off modal and the queue" rather than "review the UI across these 8 surfaces at 2 widths".
-- Scope by **mechanism, not by list**. "Was it in the brief" is the wrong question; "what does
-  fixing it take" is the right one. Tell subagents:
-  - Same defect, same mechanism as the assigned fix → **just fix it**, no permission needed. If the
+- Scope by mechanism. Don't ask whether a fix was in the brief; ask what making it takes. Tell
+  subagents:
+  - Same defect, same mechanism as the assigned fix → just fix it, no permission needed. If the
     brief says paginate one unbounded query, paginate every sibling that has the identical defect.
     Report the full list of sites touched.
   - Same defect but it needs a mechanism the brief didn't sanction (a changed helper signature, a
-    different sort, an extra query) → **fix it and flag the mechanism shift prominently**, so the
-    lead reviews the new mechanism instead of rediscovering the bug on the next pass.
+    different sort, an extra query) → fix it and flag the mechanism shift, so the lead reviews
+    the new mechanism.
   - Different defect class, or anything a caller can observe — response shape, a documented
     ordering, schema, another app, shared state → **report, don't fix**. Also anything needing a
     prod mutation or a migration: hand it back.
   - Exception that overrides all of the above: if the assigned change can't be verified without the
     fix, make the fix.
-- Beware the **false contract**. "This would change the output ordering" sounds like a compatibility
-  constraint but isn't, when the ordering among tying rows was never defined in the first place.
-  Turning nondeterminism into determinism cannot break a correct caller. Before escalating on
-  "this changes behavior", check whether the behavior was actually specified.
+- Before escalating on "this changes behavior", check whether the behavior was ever specified.
+  "This would change the output ordering" is not a compatibility constraint if the ordering among
+  tying rows was never defined.
 - **No** incidental *destructive* shared-state mutation. Subagents should not modify or delete
   existing local DB rows, another portal's config, or admin settings unless the brief says to.
-  **Additive is fine** — new rows, new fixtures, new records may be created without asking; report
+  Additive is fine — new rows, new fixtures, new records may be created without asking; report
   what was added. If verification requires changing something that already exists, create a scoped
   fixture, restore it afterwards, and report exactly what was touched.
 - Stray-file gate before every commit: `git status --porcelain` first. **Don't** commit
@@ -120,11 +124,9 @@ instruction in your brief:
   assistant's flow.
 - **Never** mutate prod. No `migrate_prod.sh up`, no prod writes, no `tf.sh apply`. Read-only prod
   queries via `read_prod.sh` are fine. Hand the mutation back to your caller.
-- **Don't** re-delegate your assignment. You have the Agent tool, and the harness only forbids
-  handing your entire assignment to one subagent — but in this repo, nesting is hazardous for a
-  concrete reason: Playwright slots, alt ports, and worktrees are allocated by the agent that
-  launched you, and a nested agent has no allocation, so it will collide with another session's
-  browser or servers. You may spawn a read-only Explore agent for a genuinely parallel search;
+- **Don't** re-delegate your assignment. Playwright slots, alt ports, and worktrees are allocated by
+  the agent that launched you; a nested agent has no allocation and will collide with another
+  session's browser or servers. You may spawn a read-only Explore agent for a parallel search;
   don't spawn anything needing a browser, dev server, port, or worktree. If the work needs one,
   stop and ask your caller to allocate it. Report any agent you spawn and its token cost.
 - The "Keeping subagents in scope" rules above are about you — apply them to yourself: scope by
@@ -135,9 +137,10 @@ instruction in your brief:
   what the change can break, say so in your report.
 
 ### Shipping (commit → push → merge → prod)
-- Use the **`shipping`** skill before any commit/push/merge/deploy — it holds the full flow (stray-file check, `npm run build` gate, rebase-not-merge-commit, shared-index rule, migration ship order).
+- Use the **`shipping`** skill before any commit/push/merge/deploy — it holds the full flow (stray-file check, `npm run build` gate, deploy verification, shared-index rule, migration ship order).
 - If the user just says "commit", that means commit only — **do not** push, merge, or run the rest of the shipping flow.
-- Land branches on main via rebase/fast-forward, **never** a merge commit — Vercel's Ignored Build Step diffs `HEAD^..HEAD` scoped to the app dir, and a merge commit's first-parent diff shows no app changes, so the build is skipped.
+- Land branches on main via rebase/fast-forward rather than a merge commit, for readable history.
+- A push is **not** a deploy. Vercel's Ignored Build Step can skip an app's build silently, leaving prod on its old bundle with the code on main. `scripts/verify-deploy.sh snapshot` before pushing, `wait` after.
 
 ### Testing Notes
 - Playwright slots/servers, browser cleanup, locator timeouts, dev-mode shortcuts, and all test-account logins: use the **`testing`** skill.
@@ -148,16 +151,15 @@ instruction in your brief:
   ripgrep is embedded in the Claude Code binary and exposed as an `rg` shell function instead, so
   it's always available in Bash but never shows up in the tool list. Use it: `rg` respects
   `.gitignore`, so `node_modules`, `.next`, and `.git` are skipped without extra flags.
-  If you must use `grep`, exclude at **traversal** time: `--exclude-dir=node_modules
-  --exclude-dir=.next`. Piping to `| grep -v node_modules` looks correct and is not — `grep -r` has
-  already walked every `node_modules` and read every matching `.ts`/`.d.ts` before the pipe filters
-  the *output*. Full cost, no benefit, and invisible in review because the printed results look
-  right. Worktrees make it worse — they carry their own cloned `node_modules`.
+  If you must use `grep`, exclude at traversal time: `--exclude-dir=node_modules
+  --exclude-dir=.next`. Piping to `| grep -v node_modules` does not work: `grep -r` has already
+  walked every `node_modules` and read every matching file before the pipe filters the output.
+  Worktrees carry their own cloned `node_modules`, so this costs more there.
 
 ### Keep the primary checkout on `main`
 - Preferred: delegate to a background agent with `isolation: worktree` (Agent tool). If it needs dev servers or a browser, also claim a slot for that worktree — `scripts/agent-slot.sh attach <slot> <worktree-path> <app>` — which reserves its ports + Playwright instance and boots the servers. (`agent-slot.sh up <slot> <branch> <app>` does the same but creates the worktree itself; prefer `attach`, since `worktree-gc.sh` only ever cleans up `.claude/worktrees`.)
 - Parallel agents (different terminals) should **not** share the `main` checkout — spin up isolated worktree + server stacks with `scripts/agent-slot.sh`: use the **`agent-slots`** skill.
-- If working directly in a worktree, run that worktree's own dev servers on alt ports to verify — the user's servers on 3001/3002/8000 watch the main checkout and won't hot-reload worktree edits. **Don't improvise ports:** slots 1..7 reserve `8010-8070` and `3011-3074`, so a worktree without a slot uses **8080+** (backend) and **3080+** (frontends).
+- If working directly in a worktree, run that worktree's own dev servers on alt ports to verify — the user's servers on 3001/3002/8000 watch the main checkout and won't hot-reload worktree edits. **Don't improvise ports:** slots 1..7 reserve `8010-8070` and `3011-3074`, so a worktree without a slot uses 8080+ (backend) and 3080+ (frontends).
 - Testing a Next.js frontend (or FastAPI backend) from a git worktree has env/tooling snags (hardcoded dev port, `node_modules` — clone it with `cp -Rc`, never symlink, or Turbopack panics and you end up building with a bundler Vercel doesn't use — missing `.env.local`): use the **`worktree-nextjs-testing`** skill.
 - Commit/push/merge from the worktree, then tear it down (`agent-slot.sh down <slot>`). The primary checkout stays on `main` throughout.
 - Carve-out: quick single-file edits and read-only tasks don't need a worktree — just work in place (no branch switch needed for read-only).
@@ -235,11 +237,11 @@ longer a queue item goes unworked, the more likely it is to vanish. Local fixtur
 the limit, so it passes every test and reads as correct code (18 instances found 08/13/26).
 
 Fetch rows scoped to what the section shows; get counts from a counts sibling — see
-`count_orders_by_status` (`app/db/`) and the `/status-counts` routes, declared **above** any
+`count_orders_by_status` (`app/db/`) and the `/status-counts` routes, declared above any
 `/{id}` route and mirroring the list function's source table. For a predicate that isn't a plain
 status (`script_pdf_url IS NULL`, a date window), ask the list endpoint with `limit=1` and read
-`total` rather than approximating. Review heuristic: **if a number can't exceed the page size, it's
-counting the buffer.**
+`total` rather than approximating. Review heuristic: if a number can't exceed the page size, it's
+counting the buffer.
 
 ### Accessing client messages
 
