@@ -30,9 +30,7 @@ All repos auto deploy on pushes to main git branch (ignored on no diff).
 Note: the prod FastAPI API runs on Render; the prod DB is AWS RDS (private, SSM-only).
 
 ### Staging environment (full cloud replica, safe to test against)
-There is a complete cloud staging stack (Render FastAPI + Supabase DB + Vercel previews) that mirrors prod but is fully isolated from AWS prod data — safe for prod-like end-to-end testing including real mutations. Stripe
-on staging and on every Vercel preview is **test mode** (<REDACTED_ACCOUNT> account); live keys exist only
-on the production target of each Vercel project and on the prod Render service. URLs, the persistent `staging` branch (**never** commit directly to it), and refreshing it (`scripts/refresh-staging.sh`): use the **`staging`** skill.
+There is a complete cloud staging stack (Render FastAPI + Supabase DB + Vercel previews) that mirrors prod but is fully isolated from AWS prod data — safe for prod-like end-to-end testing including real mutations. URLs, the persistent `staging` branch (**never** commit directly to it), and refreshing it (`scripts/refresh-staging.sh`): use the **`staging`** skill.
 
 
 ### Prod safety (applies to this entire file)
