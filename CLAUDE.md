@@ -1,4 +1,4 @@
-Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.  
+Additions to this document must be minimal and concise.  Narration on why these instructions exist should not be present in this document.
 
 ##What we are building:
 
@@ -97,9 +97,11 @@ from unrequested writes.
   constraint but isn't, when the ordering among tying rows was never defined in the first place.
   Turning nondeterminism into determinism cannot break a correct caller. Before escalating on
   "this changes behavior", check whether the behavior was actually specified.
-- **No** incidental shared-state mutation. Subagents should not change local DB rows, another portal's
-  config, or admin settings unless the brief says to. If verification requires it, they should
-  create a scoped fixture, restore it afterwards, and report exactly what was touched.
+- **No** incidental *destructive* shared-state mutation. Subagents should not modify or delete
+  existing local DB rows, another portal's config, or admin settings unless the brief says to.
+  **Additive is fine** — new rows, new fixtures, new records may be created without asking; report
+  what was added. If verification requires changing something that already exists, create a scoped
+  fixture, restore it afterwards, and report exactly what was touched.
 - Stray-file gate before every commit: `git status --porcelain` first. **Don't** commit
   `package.json` / lockfile changes produced by running build tooling in a worktree — those are
   environment artifacts. Lead agents should check the subagent's branch before merging.
@@ -127,7 +129,8 @@ instruction in your brief:
   stop and ask your caller to allocate it. Report any agent you spawn and its token cost.
 - The "Keeping subagents in scope" rules above are about you — apply them to yourself: scope by
   mechanism (fix same-mechanism siblings, flag mechanism shifts, report observable-contract
-  changes), no incidental shared-state mutation, stray-file gate before every commit.
+  changes), no incidental destructive shared-state mutation (additive is fine), stray-file gate
+  before every commit.
 - The blast-radius rule at the top applies to you too. If your brief's rigor looks mismatched to
   what the change can break, say so in your report.
 
